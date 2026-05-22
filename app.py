@@ -194,10 +194,7 @@ HTML_TEMPLATE = """
         <div class="task-list" id="task-list-container">
             {% for task in tasks %}
             <div class="task-item" id="task-{{ task[0] }}">
-                <!-- 1. 點擊文字本身：觸發立刻蒸發消失 -->
                 <span class="task-text" onclick="dismissTask({{ task[0] }})">{{ task[1] }}</span>
-                
-                <!-- 2. 點擊刪除按鈕：觸發立刻蒸發消失，並防範手機表單跳轉 -->
                 <form method="POST" action="/delete/{{ task[0] }}" class="delete-form" onsubmit="return dismissTaskWithForm(event, {{ task[0] }})">
                     <button type="submit" class="btn btn-delete">✕ 刪除</button>
                 </form>
@@ -211,29 +208,26 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
-        // 核心功能：讓指定的代辦項目一瞬間在地球上消失
         function removeElementFromScreen(taskId) {
             const taskElement = document.getElementById('task-' + taskId);
             if (taskElement) {
-                taskElement.remove(); // 畫面秒刪
+                taskElement.remove();
             }
-            
-            // 檢查如果全部都刪光了，自動補上喝咖啡的優雅提示
             const container = document.getElementById('task-list-container');
             if (container && container.querySelectorAll('.task-item').length === 0) {
                 container.innerHTML = '<div class="empty-state" id="empty-msg">☕ 目前沒有待辦事項，休息一下吧！</div>';
             }
         }
 
-        // 點擊文字：畫面秒消失，後台默默去雲端執行刪除
+        // 點擊文字本身：觸發立刻蒸發消失
         function dismissTask(taskId) {
             removeElementFromScreen(taskId);
             fetch('/delete/' + taskId, { method: 'POST' });
         }
 
-        // 點擊按鈕：攔截表單的重整行為，畫面秒消失，後台默默送出請求
+        // 點擊刪除按鈕：觸發立刻蒸發消失
         function dismissTaskWithForm(event, taskId) {
-            event.preventDefault(); // 阻止網頁頓一下或重新整理
+            event.preventDefault();
             removeElementFromScreen(taskId);
             fetch('/delete/' + taskId, { method: 'POST' });
             return false;
@@ -241,3 +235,51 @@ HTML_TEMPLATE = """
     </script>
 </body>
 </html>
+"""
+
+@app.route("/")
+def index():
+    if not DATABASE_URL:
+        return "請在 Render 設定 DATABASE_URL 環境變數"
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, task, is_completed FROM github_tasks ORDER BY id DESC;")
+    tasks = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template_string(HTML_TEMPLATE, tasks=tasks)
+
+@app.route("/add", methods=["POST"])
+def add_task():
+    task = request.form.get("new_task")
+    if task:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("INSERT INTO github_tasks (task) VALUES (%s);", (task,))
+        conn.commit()
+        cur.close()
+        conn.close()
+    return redirect("/")
+
+@app.route("/delete/<int:task_id>", methods=["POST"])
+def delete_task(task_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM github_tasks WHERE id = %s;", (task_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"success": True})
+
+@app.route("/toggle/<int:task_id>", methods=["POST"])
+def toggle_task(task_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE github_tasks SET is_completed = NOT is_completed WHERE id = %s;", (task_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"success": True})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
