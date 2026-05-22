@@ -1,24 +1,35 @@
-import json
 import os
-from flask import Flask, jsonify, redirect, render_template_string, request
+import psycopg2
+from flask import Flask, render_template_string, request, redirect, jsonify
 
 app = Flask(__name__)
-DATA_FILE = "todo_list.json"
 
+# 取得剛剛在 Render 設定的雲端資料庫網址
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
-def load_tasks():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+def get_db_connection():
+    # 建立與 Render PostgreSQL 的安全連線
+    return psycopg2.connect(DATABASE_URL, sslmode='require')
 
+def init_db():
+    # 自動在雲端建立資料表，並多加一個 is_completed 欄位用來紀錄是否劃掉
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS github_tasks (
+            id SERIAL PRIMARY KEY,
+            task TEXT NOT NULL,
+            is_completed BOOLEAN DEFAULT FALSE
+        );
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
 
-def save_tasks(tasks):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(tasks, f, ensure_ascii=False, indent=4)
+# 如果有資料庫網址，啟動時立刻初始化
+if DATABASE_URL:
+    init_db()
 
-
-# 這裡就是我們新改的網頁外觀，裡面已經完美融入了 manifest 連動！
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -26,7 +37,6 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我的質感待辦清單</title>
-    <!-- 修正：這行身分證連動必須安穩地躺在 head 標籤裡面 -->
     <link rel="manifest" href="/manifest.json">
     <style>
         :root {
@@ -39,22 +49,18 @@ HTML_TEMPLATE = """
             --danger: #e53e3e;
             --danger-light: #fff5f5;
             --border-radius: 12px;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15);
         }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            /* 修正：換成全新、100% 純英文無錯字的椎名真晝高畫質壁紙網址 */
             background: url('https://c4.wallpaperflare.com/wallpaper/892/625/70/%E6%A4%8E%E5%90%8D%E7%9C%9F%E6%98%BC-%E3%81%8A%E9%9A%A3%E3%81%AE%E5%A4%A9%E4%BD%BF%E6%A7%98%E3%81%AB%E3%81%84%E3%81%A4%E3%81%AE%E9%96%93%E3%81%AB%E3%81%8B%E9%A7%84%E7%9B%AE%E4%BA%BA%E9%96%93%E3%81%AB%E3%81%95%E3%82%8C%E3%81%A6%E3%81%84%E3%81%9F%E4%BB%B6-hd-wallpaper-preview.jpg') no-repeat center center fixed;
             background-size: cover;
-            
             color: var(--text-main);
             margin: 0;
             padding: 20px;
             display: flex;
             justify-content: center;
-            
-            /* 這裡幫 pricing 居中，卡片就會漂亮地浮在畫面正中間 */
             align-items: center; 
             min-height: 100vh;
             box-sizing: border-box;
@@ -63,24 +69,14 @@ HTML_TEMPLATE = """
         .container {
             width: 100%;
             max-width: 480px;
-            
-            /* 1. 設定你想要的透明度，0.5 是一個很平衡、看得清字又能透出真晝的舒服數值 */
             background: rgba(255, 255, 255, 0.5); 
-            
-            /* 2. 毛玻璃霧面效果 */
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
-            
             border-radius: var(--border-radius);
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15);
+            box-shadow: var(--shadow);
             padding: 24px;
-            margin-top: 20px;
             box-sizing: border-box;
-            
-            /* 3. 精緻的邊框 */
             border: 1px solid rgba(255, 255, 255, 0.2);
-            
-            /* 💡 注意：原本這裡有一行 background-color: var(--card-bg); 已經被我們消滅了！ */
         }
 
         h2 {
@@ -107,6 +103,7 @@ HTML_TEMPLATE = """
             font-size: 16px;
             outline: none;
             transition: border-color 0.2s;
+            background: rgba(255, 255, 255, 0.6);
         }
 
         input[type="text"]:focus {
@@ -143,21 +140,29 @@ HTML_TEMPLATE = """
             justify-content: space-between;
             align-items: center;
             padding: 14px 16px;
-            background-color: #f8fafc;
-            border: 1px solid #edf2f7;
+            background-color: rgba(248, 250, 252, 0.7);
+            border: 1px solid rgba(237, 242, 247, 0.5);
             border-radius: var(--border-radius);
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: all 0.3s ease;
         }
 
-        .task-item:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+        /* 🪄 關鍵特效：當被劃掉時，卡片變淡、加上刪除線 */
+        .task-item.completed {
+            opacity: 0.5;
+        }
+        
+        .task-item.completed .task-text {
+            text-decoration: line-through;
+            color: var(--text-muted);
         }
 
         .task-text {
             font-size: 16px;
             word-break: break-all;
             padding-right: 10px;
+            cursor: pointer; /* 讓滑鼠移上去變手指，提示可以點擊 */
+            flex: 1;
+            transition: all 0.2s;
         }
 
         .btn-delete {
@@ -166,6 +171,8 @@ HTML_TEMPLATE = """
             padding: 6px 12px;
             font-size: 14px;
             border-radius: 8px;
+            border: none;
+            cursor: pointer;
         }
 
         .btn-delete:hover {
@@ -182,7 +189,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h2>📝 待辦事項清單</h2>
+        <h2>📝 雲端同步待辦清單</h2>
         
         <form method="POST" action="/add" class="input-group">
             <input type="text" name="new_task" placeholder="今天想完成什麼事呢？" required autocomplete="off">
@@ -191,10 +198,11 @@ HTML_TEMPLATE = """
 
         <div class="task-list">
             {% for task in tasks %}
-            <div class="task-item">
-                <span class="task-text">{{ task }}</span>
-                <form method="POST" action="/delete/{{ loop.index0 }}" style="margin: 0;">
-                    <button type="submit" class="btn btn-delete">✓ 完成</button>
+            <!-- 根據資料庫紀錄的狀態，動態決定要不要加上完成劃掉的樣式 -->
+            <div class="task-item {% if task[2] %}completed{% endif %}" id="task-{{ task[0] }}">
+                <span class="task-text" onclick="toggleTask({{ task[0] }})">{{ task[1] }}</span>
+                <form method="POST" action="/delete/{{ task[0] }}" style="margin: 0;">
+                    <button type="submit" class="btn btn-delete">✕ 刪除</button>
                 </form>
             </div>
             {% else %}
@@ -204,58 +212,86 @@ HTML_TEMPLATE = """
             {% endfor %}
         </div>
     </div>
+
+    <!-- 🪄 網頁動態魔法：點擊文字時，前端立刻變色劃掉，幕後悄悄發通知給雲端資料庫更新，完全不需要重整網頁！ -->
+    <script>
+        function toggleTask(taskId) {
+            const taskElement = document.getElementById('task-' + taskId);
+            taskElement.classList.toggle('completed'); // 切換劃掉特效
+            
+            // 悄悄通知後端資料庫
+            fetch('/toggle/' + taskId, { method: 'POST' });
+        }
+    </script>
 </body>
 </html>
 """
 
-
 @app.route("/")
 def index():
-    tasks = load_tasks()
+    if not DATABASE_URL:
+        return "請先設定 DATABASE_URL 環境變數"
+    conn = get_db_connection()
+    cur = conn.cursor()
+    # 從雲端資料庫撈出所有任務，按最新排到最前
+    cur.execute("SELECT id, task, is_completed FROM github_tasks ORDER BY id DESC;")
+    tasks = cur.fetchall()
+    cur.close()
+    conn.close()
     return render_template_string(HTML_TEMPLATE, tasks=tasks)
-
 
 @app.route("/add", methods=["POST"])
 def add_task():
     task = request.form.get("new_task")
     if task:
-        tasks = load_tasks()
-        tasks.append(task)
-        save_tasks(tasks)
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("INSERT INTO github_tasks (task) VALUES (%s);", (task,))
+        conn.commit()
+        cur.close()
+        conn.close()
     return redirect("/")
-
 
 @app.route("/delete/<int:task_id>", methods=["POST"])
 def delete_task(task_id):
-    tasks = load_tasks()
-    if 0 <= task_id < len(tasks):
-        tasks.pop(task_id)
-        save_tasks(tasks)
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM github_tasks WHERE id = %s;", (task_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
     return redirect("/")
 
+# 切換劃掉與否的秘密通道
+@app.route("/toggle/<int:task_id>", methods=["POST"])
+def toggle_task(task_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    # 讓 True 變 False，False 變 True
+    cur.execute("UPDATE github_tasks SET is_completed = NOT is_completed WHERE id = %s;", (task_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"success": True})
 
-# 這裡負責把身分證資訊用正確的 json 格式丟回給手機瀏覽器
 @app.route("/manifest.json")
 def manifest():
-    return jsonify(
-        {
-            "short_name": "我的清單",
-            "name": "我的質感待辦清單 App",
-            "icons": [
-                {
-                    "src": "https://cdn-icons-png.flaticon.com/512/9063/9063163.png",
-                    "type": "image/png",
-                    "sizes": "512x512",
-                }
-            ],
-            "start_url": "/",
-            "background_color": "#f4f6f9",
-            "theme_color": "#4a6fa5",
-            "display": "standalone",
-            "orientation": "portrait",
-        }
-    )
-
+    return jsonify({
+        "short_name": "我的清單",
+        "name": "我的質感待辦清單 App",
+        "icons": [
+            {
+                "src": "https://cdn-icons-png.flaticon.com/512/9063/9063163.png",
+                "type": "image/png",
+                "sizes": "512x512"
+            }
+        ],
+        "start_url": "/",
+        "background_color": "#f4f6f9",
+        "theme_color": "#4a6fa5",
+        "display": "standalone",
+        "orientation": "portrait"
+    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
