@@ -187,6 +187,7 @@ HTML_TEMPLATE = """
 </body>
 </html>
 """
+<link rel="manifest" href="/manifest.json">
 
 
 # 網頁路由 1：首頁（秀出所有待辦事項）
