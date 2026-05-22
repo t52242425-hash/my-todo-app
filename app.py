@@ -68,14 +68,14 @@ HTML_TEMPLATE = """
         .container {
             width: 100%;
             max-width: 480px;
-            background: rgba(255, 255, 255, 0.75); 
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
+            background: rgba(255, 255, 255, 0.8); 
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             border-radius: var(--border-radius);
             box-shadow: var(--shadow);
             padding: 24px;
             box-sizing: border-box;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.25);
         }
 
         h2 {
@@ -139,7 +139,7 @@ HTML_TEMPLATE = """
             justify-content: space-between;
             align-items: center;
             padding: 14px 16px;
-            background-color: rgba(248, 250, 252, 0.85);
+            background-color: rgba(248, 250, 252, 0.9);
             border: 1px solid rgba(237, 242, 247, 0.5);
             border-radius: var(--border-radius);
             transition: all 0.3s ease;
