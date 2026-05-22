@@ -1,0 +1,16 @@
+{
+  "short_name": "我的清單",
+  "name": "我的質感待辦清單 App",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/9063/9063163.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#f4f6f9",
+  "theme_color": "#4a6fa5",
+  "display": "standalone",
+  "orientation": "portrait"
+}
