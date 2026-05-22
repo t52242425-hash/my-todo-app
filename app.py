@@ -134,7 +134,7 @@ HTML_TEMPLATE = """
             gap: 12px;
         }
 
-        /* 事項基礎樣式與過渡特效設定 */
+        /* 項目基礎樣式 */
         .task-item {
             display: flex;
             justify-content: space-between;
@@ -143,17 +143,21 @@ HTML_TEMPLATE = """
             background-color: rgba(248, 250, 252, 0.9);
             border: 1px solid rgba(237, 242, 247, 0.5);
             border-radius: var(--border-radius);
-            max-height: 100px; 
+            max-height: 120px; 
             opacity: 1;
             transform: scale(1);
             overflow: hidden;
             box-sizing: border-box;
             
-            /* 讓淡出動作的 0.4 秒平滑執行 */
-            transition: opacity 0.4s ease, transform 0.4s ease, max-height 0.4s ease, padding 0.4s ease, margin 0.4s ease;
+            /* 動態過渡過渡效果 */
+            transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
+                        transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
+                        max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
+                        padding 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
+                        margin 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             
-            /* 登場滑入動畫 */
-            animation: slideIn 0.4s ease forwards;
+            /* 新增時的登場動畫 */
+            animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
 
         @keyframes slideIn {
@@ -163,19 +167,20 @@ HTML_TEMPLATE = """
                 max-height: 0;
                 padding-top: 0;
                 padding-bottom: 0;
+                margin-top: -6px;
+                margin-bottom: -6px;
             }
             to {
                 opacity: 1;
-                max-height: 100px;
                 transform: translateY(0) scale(1);
             }
         }
 
-        /* 【關鍵修正】加上 animation: none !important 徹底瓦解登場動畫的死鎖 */
+        /* 漸漸消失動畫樣式 */
         .task-item.fade-out {
             animation: none !important; 
             opacity: 0 !important;
-            transform: scale(0.9) translateY(-15px) !important;
+            transform: scale(0.9) translateY(-20px) !important;
             max-height: 0 !important;
             padding-top: 0 !important;
             padding-bottom: 0 !important;
@@ -192,12 +197,6 @@ HTML_TEMPLATE = """
             flex: 1;
         }
 
-        .delete-form {
-            margin: 0;
-            padding: 0;
-            display: inline;
-        }
-
         .btn-delete {
             background-color: transparent;
             color: var(--danger);
@@ -206,6 +205,7 @@ HTML_TEMPLATE = """
             border-radius: 8px;
             border: none;
             cursor: pointer;
+            transition: background-color 0.2s;
         }
 
         .btn-delete:hover {
@@ -233,9 +233,8 @@ HTML_TEMPLATE = """
             {% for task in tasks %}
             <div class="task-item" id="task-{{ task[0] }}">
                 <span class="task-text" onclick="dismissTask({{ task[0] }})">{{ task[1] }}</span>
-                <form class="delete-form" onsubmit="dismissTaskWithForm(event, {{ task[0] }})">
-                    <button type="submit" class="btn btn-delete">✕ 刪除</button>
-                </form>
+                <!-- 徹底移除表單，改用純按鈕點擊事件，封死所有網頁重整的可能性 -->
+                <button type="button" class="btn btn-delete" onclick="dismissTask({{ task[0] }})">✕ 刪除</button>
             </div>
             {% else %}
             <div class="empty-state" id="empty-msg">
@@ -259,7 +258,6 @@ HTML_TEMPLATE = """
             const emptyMsg = document.getElementById('empty-msg');
             if (emptyMsg) emptyMsg.remove();
 
-            // 後端非同步存檔
             fetch('/add', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -274,24 +272,24 @@ HTML_TEMPLATE = """
                     newItem.id = 'task-' + data.id;
                     newItem.innerHTML = `
                         <span class="task-text" onclick="dismissTask(${data.id})">${escapeHtml(taskText)}</span>
-                        <form class="delete-form" onsubmit="dismissTaskWithForm(event, ${data.id})">
-                            <button type="submit" class="btn btn-delete">✕ 刪除</button>
-                        </form>
+                        <button type="button" class="btn btn-delete" onclick="dismissTask(${data.id})">✕ 刪除</button>
                     `;
-                    // 滑入登場
                     container.insertBefore(newItem, container.firstChild);
                 }
             });
         });
 
-        // 核心：全域淡出機制
-        function fadeOutElement(taskId) {
+        // 核心：淡出並移除機制
+        function dismissTask(taskId) {
             const taskElement = document.getElementById('task-' + taskId);
             if (taskElement) {
-                // 完美加入 fade-out，此時登場動畫會被自動覆蓋並解除鎖定
+                // 1. 立刻套用淡出樣式
                 taskElement.classList.add('fade-out');
                 
-                // 等待 400 毫秒動畫完成後，從 DOM 中移除
+                // 2. 同步通知後端刪除雲端資料庫數據
+                fetch('/delete/' + taskId, { method: 'POST' });
+                
+                // 3. 確保 400 毫秒動畫播完，再從網頁拔除元素
                 setTimeout(() => {
                     taskElement.remove();
                     checkEmptyState();
@@ -304,20 +302,6 @@ HTML_TEMPLATE = """
             if (container && container.querySelectorAll('.task-item').length === 0) {
                 container.innerHTML = '<div class="empty-state" id="empty-msg">☕ 目前沒有待辦事項，休息一下吧！</div>';
             }
-        }
-
-        // 點擊文字：觸發淡出
-        function dismissTask(taskId) {
-            fadeOutElement(taskId);
-            fetch('/delete/' + taskId, { method: 'POST' });
-        }
-
-        // 點擊刪除按鈕：觸發淡出
-        function dismissTaskWithForm(event, taskId) {
-            event.preventDefault();
-            fadeOutElement(taskId);
-            fetch('/delete/' + taskId, { method: 'POST' });
-            return false;
         }
 
         function escapeHtml(text) {
