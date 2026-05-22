@@ -30,6 +30,7 @@ if DATABASE_URL:
     except Exception as e:
         print(f"Database init error: {e}")
 
+# HTML 介面與樣式
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -39,22 +40,17 @@ HTML_TEMPLATE = """
     <title>我的質感待辦清單</title>
     <style>
         :root {
-            --bg-color: #f4f6f9;
-            --card-bg: #ffffff;
-            --text-main: #2d3748;
-            --text-muted: #a0aec0;
             --primary: #4a6fa5;
             --danger: #e53e3e;
-            --danger-light: #fff5f5;
             --border-radius: 12px;
-            --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15);
+            --bg-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15);
         }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: url('https://c4.wallpaperflare.com/wallpaper/892/625/70/%E6%A4%8E%E5%90%8D%E7%9C%9F%E6%98%BC-%E3%81%8A%E9%9A%A3%E3%81%AE%E5%A4%A9%E4%BD%BF%E6%A7%98%E3%81%AB%E3%81%84%E3%81%A4%E3%81%AE%E9%96%93%E3%81%AB%E3%81%8B%E9%A7%84%E7%9B%AE%E4%BA%BA%E9%96%93%E3%81%AB%E3%81%8B%E3%81%95%E3%82%8C%E3%81%A6%E3%81%84%E3%81%AE%E9%96%93%E3%81%AB%E3%81%8B%E9%A7%84%E7%9B%AE%E4%BA%BA%E9%96%93%E3%81%AB%E3%81%95%E3%82%8C%E3%81%A6%E3%81%84%E3%81%9F%E4%BB%B6-hd-wallpaper-preview.jpg') no-repeat center center fixed;
+            /* 背景圖片連結已修正 */
+            background: url('https://c4.wallpaperflare.com/wallpaper/892/625/70/anime-girls-my-dress-up-darling-kitagawa-marin-hd-wallpaper-preview.jpg') no-repeat center center fixed;
             background-size: cover;
-            color: var(--text-main);
             margin: 0;
             padding: 20px;
             display: flex;
@@ -69,20 +65,16 @@ HTML_TEMPLATE = """
             background: rgba(255, 255, 255, 0.8); 
             backdrop-filter: blur(12px);
             border-radius: var(--border-radius);
-            box-shadow: var(--shadow);
+            box-shadow: var(--bg-shadow);
             padding: 24px;
         }
 
         h2 { margin-top: 0; margin-bottom: 24px; font-size: 24px; }
-
         .input-group { display: flex; gap: 10px; margin-bottom: 24px; }
-
         input[type="text"] { flex: 1; padding: 12px 16px; border: 1.5px solid #e2e8f0; border-radius: var(--border-radius); background: rgba(255, 255, 255, 0.6); }
-
         .btn { padding: 12px 20px; border: none; border-radius: var(--border-radius); font-weight: 600; cursor: pointer; }
-
         .btn-primary { background-color: var(--primary); color: white; }
-
+        
         .task-item {
             display: flex;
             justify-content: space-between;
@@ -92,18 +84,14 @@ HTML_TEMPLATE = """
             margin-bottom: 12px;
             border-radius: var(--border-radius);
             animation: slideIn 0.35s ease-out forwards;
-            transition: opacity 0.3s;
         }
 
         .task-text { cursor: pointer; flex: 1; transition: 0.2s; }
-        
-        /* 刪除時的動畫樣式 */
         .completed { text-decoration: line-through; opacity: 0.5; }
         .run-fade-out { pointer-events: none; animation: itemFadeOut 0.4s forwards; }
 
         @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes itemFadeOut { to { opacity: 0; transform: scale(0.9); max-height: 0; padding: 0; margin: 0; } }
-
         .btn-delete { color: var(--danger); background: none; border: none; cursor: pointer; }
     </style>
 </head>
@@ -136,26 +124,17 @@ HTML_TEMPLATE = """
                 body: 'new_task=' + encodeURIComponent(taskText)
             })
             .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    location.reload(); // 簡單重新載入以呈現資料庫最新狀態
-                }
-            });
+            .then(data => { if (data.success) location.reload(); });
             input.value = '';
         });
 
         function executeDelete(taskId) {
             const taskItem = document.getElementById('task-' + taskId);
             const taskText = taskItem.querySelector('.task-text');
-            
-            // 加上刪除線並執行淡出動畫
             taskText.classList.add('completed');
             taskItem.classList.add('run-fade-out');
-
             fetch('/delete/' + taskId, { method: 'POST' })
-            .then(() => {
-                setTimeout(() => taskItem.remove(), 400);
-            });
+            .then(() => { setTimeout(() => taskItem.remove(), 400); });
         }
     </script>
 </body>
