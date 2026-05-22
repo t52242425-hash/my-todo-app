@@ -134,7 +134,7 @@ HTML_TEMPLATE = """
             gap: 12px;
         }
 
-        /* 事項基本與登場動畫設定 */
+        /* 初始事項狀態與統一動畫轉場過渡 */
         .task-item {
             display: flex;
             justify-content: space-between;
@@ -143,16 +143,20 @@ HTML_TEMPLATE = """
             background-color: rgba(248, 250, 252, 0.9);
             border: 1px solid rgba(237, 242, 247, 0.5);
             border-radius: var(--border-radius);
-            transition: opacity 0.4s ease, transform 0.4s ease, max-height 0.4s ease, padding 0.4s ease, margin 0.4s ease;
             max-height: 100px; 
             opacity: 1;
             transform: scale(1);
             overflow: hidden;
+            box-sizing: border-box;
             
-            /* 新增時的登場動畫：由上往下平滑滑入 */
+            /* 平滑轉場核心：當加上關閉樣式時，這段設定會接管動作 */
+            transition: opacity 0.4s ease, transform 0.4s ease, max-height 0.4s ease, padding 0.4s ease, margin 0.4s ease;
+            
+            /* 新增事項時的登場淡入動態 */
             animation: slideIn 0.4s ease forwards;
         }
 
+        /* 登場動畫：由上方滑入並淡入 */
         @keyframes slideIn {
             from {
                 opacity: 0;
@@ -160,6 +164,8 @@ HTML_TEMPLATE = """
                 max-height: 0;
                 padding-top: 0;
                 padding-bottom: 0;
+                margin-top: -6px;
+                margin-bottom: -6px;
             }
             to {
                 opacity: 1;
@@ -168,10 +174,10 @@ HTML_TEMPLATE = """
             }
         }
 
-        /* 漸漸消失時的樣式 */
+        /* 漸漸消失動畫樣式（強烈覆蓋以防衝突） */
         .task-item.fade-out {
-            opacity: 0;
-            transform: scale(0.9) translateY(-10px) !important;
+            opacity: 0 !important;
+            transform: scale(0.9) translateY(-15px) !important;
             max-height: 0 !important;
             padding-top: 0 !important;
             padding-bottom: 0 !important;
@@ -220,7 +226,6 @@ HTML_TEMPLATE = """
     <div class="container">
         <h2>📝 雲端同步待辦清單</h2>
         
-        <!-- 改用 AJAX 非同步新增，達成秒加入與滑入效果 -->
         <form id="add-form" class="input-group">
             <input type="text" id="new-task-input" placeholder="今天想完成什麼事呢？" required autocomplete="off">
             <button type="submit" class="btn btn-primary">新增</button>
@@ -229,8 +234,9 @@ HTML_TEMPLATE = """
         <div class="task-list" id="task-list-container">
             {% for task in tasks %}
             <div class="task-item" id="task-{{ task[0] }}">
+                <!-- 舊有的項目也完美確保綁定 dismiss 函數 -->
                 <span class="task-text" onclick="dismissTask({{ task[0] }})">{{ task[1] }}</span>
-                <form class="delete-form" onsubmit="return dismissTaskWithForm(event, {{ task[0] }})">
+                <form class="delete-form" onsubmit="dismissTaskWithForm(event, {{ task[0] }})">
                     <button type="submit" class="btn btn-delete">✕ 刪除</button>
                 </form>
             </div>
@@ -243,22 +249,20 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
-        // 監聽表單送出事件（新增事項）
+        // 監聽新增表單
         document.getElementById('add-form').addEventListener('submit', function(e) {
-            e.preventDefault(); // 阻止頁面跳轉
+            e.preventDefault();
             
             const input = document.getElementById('new-task-input');
             const taskText = input.value.trim();
             if (!taskText) return;
 
-            // 乾淨清空輸入框
             input.value = '';
 
-            // 把「休息一下」的提示先拿掉
             const emptyMsg = document.getElementById('empty-msg');
             if (emptyMsg) emptyMsg.remove();
 
-            // 先發送請求給後端儲存，並拿到這筆資料的最新 ID
+            // 後端悄悄存檔
             fetch('/add', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -267,28 +271,30 @@ HTML_TEMPLATE = """
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    // 動態產生帶有登場動畫的 HTML 結構
                     const container = document.getElementById('task-list-container');
                     const newItem = document.createElement('div');
                     newItem.className = 'task-item';
                     newItem.id = 'task-' + data.id;
                     newItem.innerHTML = `
                         <span class="task-text" onclick="dismissTask(${data.id})">${escapeHtml(taskText)}</span>
-                        <form class="delete-form" onsubmit="return dismissTaskWithForm(event, ${data.id})">
+                        <form class="delete-form" onsubmit="dismissTaskWithForm(event, ${data.id})">
                             <button type="submit" class="btn btn-delete">✕ 刪除</button>
                         </form>
                     `;
-                    // 塞在最上面
+                    // 置頂滑入
                     container.insertBefore(newItem, container.firstChild);
                 }
             });
         });
 
-        // 核心：漸漸消失動畫
+        // 核心：全域一體化的淡出消失機制
         function fadeOutElement(taskId) {
             const taskElement = document.getElementById('task-' + taskId);
             if (taskElement) {
+                // 1. 強制加入淡出 CSS 類別，進行 0.4 秒的平滑變透明與高度縮減
                 taskElement.classList.add('fade-out');
+                
+                // 2. 當動畫完美播完後，將元素從 DOM 結構中徹底移去
                 setTimeout(() => {
                     taskElement.remove();
                     checkEmptyState();
@@ -303,13 +309,13 @@ HTML_TEMPLATE = """
             }
         }
 
-        // 點擊文字本身：漸漸消失
+        // 點擊文字：觸發淡出，通知後端刪除
         function dismissTask(taskId) {
             fadeOutElement(taskId);
             fetch('/delete/' + taskId, { method: 'POST' });
         }
 
-        // 點擊刪除按鈕：漸漸消失
+        // 點擊刪除按鈕：攔截跳轉，觸發淡出，通知後端刪除
         function dismissTaskWithForm(event, taskId) {
             event.preventDefault();
             fadeOutElement(taskId);
@@ -317,7 +323,6 @@ HTML_TEMPLATE = """
             return false;
         }
 
-        // 安全防護字串轉換
         function escapeHtml(text) {
             return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
@@ -345,7 +350,6 @@ def add_task():
     if task:
         conn = get_db_connection()
         cur = conn.cursor()
-        # 插入數據並返回新生成的 ID
         cur.execute("INSERT INTO github_tasks (task) VALUES (%s) RETURNING id;", (task,))
         new_id = cur.fetchone()[0]
         conn.commit()
