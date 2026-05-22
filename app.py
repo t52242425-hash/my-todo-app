@@ -63,12 +63,22 @@ HTML_TEMPLATE = """
         .container {
             width: 100%;
             max-width: 480px;
-            background: var(--card-bg);
+            
+            /* 關鍵修正 1：原本是 #ffffff(純白)，改成帶有 0.85 透明度的白 */
+            background: rgba(255, 255, 255, 0.85); 
+            
+            /* 關鍵修正 2：毛玻璃核心！讓卡片背後的真晝圖片產生高質感模糊，文字才會清晰 */
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            
             border-radius: var(--border-radius);
-            box-shadow: var(--shadow);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15); /* 讓陰影稍微加深，增加懸浮感 */
             padding: 24px;
             margin-top: 20px;
             box-sizing: border-box;
+            
+            /* 加上輕微的白色細邊框，看起來更精緻 */
+            border: 1px solid rgba(255, 255, 255, 0.4);
         }
 
         h2 {
