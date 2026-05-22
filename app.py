@@ -134,7 +134,7 @@ HTML_TEMPLATE = """
             gap: 12px;
         }
 
-        /* 項目基礎樣式 */
+        /* 項目基礎樣式 - 確保所有會變動的屬性都有寫進 transition */
         .task-item {
             display: flex;
             justify-content: space-between;
@@ -143,20 +143,19 @@ HTML_TEMPLATE = """
             background-color: rgba(248, 250, 252, 0.9);
             border: 1px solid rgba(237, 242, 247, 0.5);
             border-radius: var(--border-radius);
-            max-height: 120px; 
+            max-height: 80px; 
             opacity: 1;
             transform: scale(1);
             overflow: hidden;
             box-sizing: border-box;
             
-            /* 動態過渡過渡效果 */
-            transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
-                        transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
-                        max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
-                        padding 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
-                        margin 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            /* 使用極致平滑的過渡曲線 */
+            transition: opacity 0.4s ease, 
+                        transform 0.4s ease, 
+                        max-height 0.4s ease, 
+                        padding 0.4s ease, 
+                        margin 0.4s ease;
             
-            /* 新增時的登場動畫 */
             animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
 
@@ -167,26 +166,25 @@ HTML_TEMPLATE = """
                 max-height: 0;
                 padding-top: 0;
                 padding-bottom: 0;
-                margin-top: -6px;
-                margin-bottom: -6px;
             }
             to {
                 opacity: 1;
                 transform: translateY(0) scale(1);
+                max-height: 80px;
             }
         }
 
-        /* 漸漸消失動畫樣式 */
+        /* 淡出動畫樣式：利用 transition 觸發，而不是 animation */
         .task-item.fade-out {
-            animation: none !important; 
             opacity: 0 !important;
-            transform: scale(0.9) translateY(-20px) !important;
+            transform: scale(0.8) translateY(-15px) !important;
             max-height: 0 !important;
             padding-top: 0 !important;
             padding-bottom: 0 !important;
-            margin-top: 0 !important;
-            margin-bottom: 0 !important;
+            margin-top: -6px !important;
+            margin-bottom: -6px !important;
             border-color: transparent !important;
+            pointer-events: none; /* 觸發後不允許任何點擊 */
         }
 
         .task-text {
@@ -232,9 +230,9 @@ HTML_TEMPLATE = """
         <div class="task-list" id="task-list-container">
             {% for task in tasks %}
             <div class="task-item" id="task-{{ task[0] }}">
-                <span class="task-text" onclick="dismissTask({{ task[0] }})">{{ task[1] }}</span>
-                <!-- 徹底移除表單，改用純按鈕點擊事件，封死所有網頁重整的可能性 -->
-                <button type="button" class="btn btn-delete" onclick="dismissTask({{ task[0] }})">✕ 刪除</button>
+                <span class="task-text" onclick="dismissTask(event, {{ task[0] }})">{{ task[1] }}</span>
+                <!-- 傳入 event 參數，用於切斷點擊事件的泡沫化傳遞 -->
+                <button type="button" class="btn btn-delete" onclick="dismissTask(event, {{ task[0] }})">✕ 刪除</button>
             </div>
             {% else %}
             <div class="empty-state" id="empty-msg">
@@ -271,29 +269,37 @@ HTML_TEMPLATE = """
                     newItem.className = 'task-item';
                     newItem.id = 'task-' + data.id;
                     newItem.innerHTML = `
-                        <span class="task-text" onclick="dismissTask(${data.id})">${escapeHtml(taskText)}</span>
-                        <button type="button" class="btn btn-delete" onclick="dismissTask(${data.id})">✕ 刪除</button>
+                        <span class="task-text" onclick="dismissTask(event, ${data.id})">${escapeHtml(taskText)}</span>
+                        <button type="button" class="btn btn-delete" onclick="dismissTask(event, ${data.id})">✕ 刪除</button>
                     `;
                     container.insertBefore(newItem, container.firstChild);
                 }
             });
         });
 
-        // 核心：淡出並移除機制
-        function dismissTask(taskId) {
+        // 核心：優化後的防冒泡淡出機制
+        function dismissTask(event, taskId) {
+            // 1. 核心絕招：阻止事件冒泡與預設行為，防止同一個點擊觸發兩次 dismiss
+            if (event) {
+                event.stopPropagation();
+                event.preventDefault();
+            }
+            
             const taskElement = document.getElementById('task-' + taskId);
-            if (taskElement) {
-                // 1. 立刻套用淡出樣式
-                taskElement.classList.add('fade-out');
+            // 檢查是否已經在進行淡出，防止重複執行
+            if (taskElement && !taskElement.classList.contains('fade-out')) {
                 
-                // 2. 同步通知後端刪除雲端資料庫數據
+                // 2. 異步發送刪除請求給後端（讓它在背景跑，不阻塞前端動畫）
                 fetch('/delete/' + taskId, { method: 'POST' });
                 
-                // 3. 確保 400 毫秒動畫播完，再從網頁拔除元素
-                setTimeout(() => {
+                // 3. 觸發 CSS Transition 淡出
+                taskElement.classList.add('fade-out');
+                
+                // 4. 精準監聽：當瀏覽器的 CSS 過渡動畫「真正播放完畢」時，才拔除 DOM
+                taskElement.addEventListener('transitionend', function() {
                     taskElement.remove();
                     checkEmptyState();
-                }, 400);
+                }, { once: true }); // once: true 保證這個監聽器只執行一次
             }
         }
 
