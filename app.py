@@ -1,12 +1,11 @@
 import json
 import os
-from flask import Flask, jsonify, render_template_string, request
+from flask import Flask, jsonify, redirect, render_template_string, request
 
 app = Flask(__name__)
 DATA_FILE = "todo_list.json"
 
 
-# 讀取檔案功能
 def load_tasks():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -14,13 +13,12 @@ def load_tasks():
     return []
 
 
-# 儲存檔案功能
 def save_tasks(tasks):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(tasks, f, ensure_ascii=False, indent=4)
 
 
-# 💡 簡易的網頁畫面（HTML）
+# 這裡就是我們新改的網頁外觀，裡面已經完美融入了 manifest 連動！
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -28,6 +26,8 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我的質感待辦清單</title>
+    <!-- 修正：這行身分證連動必須安穩地躺在 head 標籤裡面 -->
+    <link rel="manifest" href="/manifest.json">
     <style>
         :root {
             --bg-color: #f4f6f9;
@@ -186,39 +186,56 @@ HTML_TEMPLATE = """
     </div>
 </body>
 </html>
-<link rel="manifest" href="/manifest.json">
 """
 
 
-
-# 網頁路由 1：首頁（秀出所有待辦事項）
 @app.route("/")
 def index():
     tasks = load_tasks()
     return render_template_string(HTML_TEMPLATE, tasks=tasks)
 
 
-# 網頁路由 2：新增事項
 @app.route("/add", methods=["POST"])
 def add_task():
     task = request.form.get("new_task")
-    if task and task.strip():
+    if task:
         tasks = load_tasks()
-        tasks.append(task.strip())
+        tasks.append(task)
         save_tasks(tasks)
-    return index()
+    return redirect("/")
 
 
-# 網頁路由 3：刪除/完成事項
 @app.route("/delete/<int:task_id>", methods=["POST"])
 def delete_task(task_id):
     tasks = load_tasks()
     if 0 <= task_id < len(tasks):
         tasks.pop(task_id)
         save_tasks(tasks)
-    return index()
+    return redirect("/")
 
 
-# 啟動伺服器（允許外網連線）
+# 這裡負責把身分證資訊用正確的 json 格式丟回給手機瀏覽器
+@app.route("/manifest.json")
+def manifest():
+    return jsonify(
+        {
+            "short_name": "我的清單",
+            "name": "我的質感待辦清單 App",
+            "icons": [
+                {
+                    "src": "https://cdn-icons-png.flaticon.com/512/9063/9063163.png",
+                    "type": "image/png",
+                    "sizes": "512x512",
+                }
+            ],
+            "start_url": "/",
+            "background_color": "#f4f6f9",
+            "theme_color": "#4a6fa5",
+            "display": "standalone",
+            "orientation": "portrait",
+        }
+    )
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000)
