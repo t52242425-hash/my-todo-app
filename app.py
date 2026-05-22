@@ -4,7 +4,7 @@ from flask import Flask, render_template_string, request, redirect, jsonify
 
 app = Flask(__name__)
 
-# 取得剛剛在 Render 設定的雲端資料庫網址
+# 取得在 Render 設定的雲端資料庫網址
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db_connection():
@@ -12,7 +12,7 @@ def get_db_connection():
     return psycopg2.connect(DATABASE_URL, sslmode='require')
 
 def init_db():
-    # 自動在雲端建立資料表，並多加一個 is_completed 欄位用來紀錄是否劃掉
+    # 自動在雲端建立資料表
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("""
@@ -26,9 +26,12 @@ def init_db():
     cur.close()
     conn.close()
 
-# 如果有資料庫網址，啟動時立刻初始化
+# 啟動時自動初始化資料庫
 if DATABASE_URL:
-    init_db()
+    try:
+        init_db()
+    except Exception as e:
+        print(f"Database init error: {e}")
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -146,7 +149,7 @@ HTML_TEMPLATE = """
             transition: all 0.3s ease;
         }
 
-        /* 🪄 關鍵特效：當被劃掉時，卡片變淡、加上刪除線 */
+        /* 當被劃掉時的精美動態特效 */
         .task-item.completed {
             opacity: 0.5;
         }
@@ -160,7 +163,7 @@ HTML_TEMPLATE = """
             font-size: 16px;
             word-break: break-all;
             padding-right: 10px;
-            cursor: pointer; /* 讓滑鼠移上去變手指，提示可以點擊 */
+            cursor: pointer;
             flex: 1;
             transition: all 0.2s;
         }
@@ -198,7 +201,6 @@ HTML_TEMPLATE = """
 
         <div class="task-list">
             {% for task in tasks %}
-            <!-- 根據資料庫紀錄的狀態，動態決定要不要加上完成劃掉的樣式 -->
             <div class="task-item {% if task[2] %}completed{% endif %}" id="task-{{ task[0] }}">
                 <span class="task-text" onclick="toggleTask({{ task[0] }})">{{ task[1] }}</span>
                 <form method="POST" action="/delete/{{ task[0] }}" style="margin: 0;">
@@ -213,13 +215,10 @@ HTML_TEMPLATE = """
         </div>
     </div>
 
-    <!-- 🪄 網頁動態魔法：點擊文字時，前端立刻變色劃掉，幕後悄悄發通知給雲端資料庫更新，完全不需要重整網頁！ -->
     <script>
         function toggleTask(taskId) {
             const taskElement = document.getElementById('task-' + taskId);
-            taskElement.classList.toggle('completed'); // 切換劃掉特效
-            
-            // 悄悄通知後端資料庫
+            taskElement.classList.toggle('completed');
             fetch('/toggle/' + taskId, { method: 'POST' });
         }
     </script>
@@ -230,10 +229,9 @@ HTML_TEMPLATE = """
 @app.route("/")
 def index():
     if not DATABASE_URL:
-        return "請先設定 DATABASE_URL 環境變數"
+        return "請在 Render 設定 DATABASE_URL 環境變數"
     conn = get_db_connection()
     cur = conn.cursor()
-    # 從雲端資料庫撈出所有任務，按最新排到最前
     cur.execute("SELECT id, task, is_completed FROM github_tasks ORDER BY id DESC;")
     tasks = cur.fetchall()
     cur.close()
@@ -262,12 +260,10 @@ def delete_task(task_id):
     conn.close()
     return redirect("/")
 
-# 切換劃掉與否的秘密通道
 @app.route("/toggle/<int:task_id>", methods=["POST"])
 def toggle_task(task_id):
     conn = get_db_connection()
     cur = conn.cursor()
-    # 讓 True 變 False，False 變 True
     cur.execute("UPDATE github_tasks SET is_completed = NOT is_completed WHERE id = %s;", (task_id,))
     conn.commit()
     cur.close()
