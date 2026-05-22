@@ -134,7 +134,7 @@ HTML_TEMPLATE = """
             gap: 12px;
         }
 
-        /* 初始狀態 */
+        /* 事項基本與登場動畫設定 */
         .task-item {
             display: flex;
             justify-content: space-between;
@@ -143,24 +143,41 @@ HTML_TEMPLATE = """
             background-color: rgba(248, 250, 252, 0.9);
             border: 1px solid rgba(237, 242, 247, 0.5);
             border-radius: var(--border-radius);
-            /* 核心設定：0.4秒內高度、高度內縮、透明度同時進行平滑變形 */
             transition: opacity 0.4s ease, transform 0.4s ease, max-height 0.4s ease, padding 0.4s ease, margin 0.4s ease;
             max-height: 100px; 
             opacity: 1;
             transform: scale(1);
             overflow: hidden;
+            
+            /* 新增時的登場動畫：由上往下平滑滑入 */
+            animation: slideIn 0.4s ease forwards;
         }
 
-        /* 漸漸消失時被加上去的動態樣式 */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px) scale(0.95);
+                max-height: 0;
+                padding-top: 0;
+                padding-bottom: 0;
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+                max-height: 100px;
+            }
+        }
+
+        /* 漸漸消失時的樣式 */
         .task-item.fade-out {
             opacity: 0;
-            transform: scale(0.9) translateY(-10px); /* 縮小並往上飄移 */
-            max-height: 0;
-            padding-top: 0;
-            padding-bottom: 0;
-            margin-top: 0;
-            margin-bottom: 0;
-            border-color: transparent;
+            transform: scale(0.9) translateY(-10px) !important;
+            max-height: 0 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+            border-color: transparent !important;
         }
 
         .task-text {
@@ -169,7 +186,6 @@ HTML_TEMPLATE = """
             padding-right: 10px;
             cursor: pointer;
             flex: 1;
-            transition: all 0.2s;
         }
 
         .delete-form {
@@ -204,8 +220,9 @@ HTML_TEMPLATE = """
     <div class="container">
         <h2>📝 雲端同步待辦清單</h2>
         
-        <form method="POST" action="/add" class="input-group">
-            <input type="text" name="new_task" placeholder="今天想完成什麼事呢？" required autocomplete="off">
+        <!-- 改用 AJAX 非同步新增，達成秒加入與滑入效果 -->
+        <form id="add-form" class="input-group">
+            <input type="text" id="new-task-input" placeholder="今天想完成什麼事呢？" required autocomplete="off">
             <button type="submit" class="btn btn-primary">新增</button>
         </form>
 
@@ -213,7 +230,7 @@ HTML_TEMPLATE = """
             {% for task in tasks %}
             <div class="task-item" id="task-{{ task[0] }}">
                 <span class="task-text" onclick="dismissTask({{ task[0] }})">{{ task[1] }}</span>
-                <form method="POST" action="/delete/{{ task[0] }}" class="delete-form" onsubmit="return dismissTaskWithForm(event, {{ task[0] }})">
+                <form class="delete-form" onsubmit="return dismissTaskWithForm(event, {{ task[0] }})">
                     <button type="submit" class="btn btn-delete">✕ 刪除</button>
                 </form>
             </div>
@@ -226,13 +243,52 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
-        // 核心：給予元素 .fade-out 樣式讓它慢慢變透明、變矮，動畫播完後正式從網頁移除
+        // 監聽表單送出事件（新增事項）
+        document.getElementById('add-form').addEventListener('submit', function(e) {
+            e.preventDefault(); // 阻止頁面跳轉
+            
+            const input = document.getElementById('new-task-input');
+            const taskText = input.value.trim();
+            if (!taskText) return;
+
+            // 乾淨清空輸入框
+            input.value = '';
+
+            // 把「休息一下」的提示先拿掉
+            const emptyMsg = document.getElementById('empty-msg');
+            if (emptyMsg) emptyMsg.remove();
+
+            // 先發送請求給後端儲存，並拿到這筆資料的最新 ID
+            fetch('/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'new_task=' + encodeURIComponent(taskText)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    // 動態產生帶有登場動畫的 HTML 結構
+                    const container = document.getElementById('task-list-container');
+                    const newItem = document.createElement('div');
+                    newItem.className = 'task-item';
+                    newItem.id = 'task-' + data.id;
+                    newItem.innerHTML = `
+                        <span class="task-text" onclick="dismissTask(${data.id})">${escapeHtml(taskText)}</span>
+                        <form class="delete-form" onsubmit="return dismissTaskWithForm(event, ${data.id})">
+                            <button type="submit" class="btn btn-delete">✕ 刪除</button>
+                        </form>
+                    `;
+                    // 塞在最上面
+                    container.insertBefore(newItem, container.firstChild);
+                }
+            });
+        });
+
+        // 核心：漸漸消失動畫
         function fadeOutElement(taskId) {
             const taskElement = document.getElementById('task-' + taskId);
             if (taskElement) {
-                taskElement.classList.add('fade-out'); // 觸發 CSS 漸漸消失動畫
-                
-                // 等待 400 毫秒動畫播完，再把元素徹底從網頁中徹底移除
+                taskElement.classList.add('fade-out');
                 setTimeout(() => {
                     taskElement.remove();
                     checkEmptyState();
@@ -240,7 +296,6 @@ HTML_TEMPLATE = """
             }
         }
 
-        // 檢查如果清單空了，淡入顯示咖啡提示
         function checkEmptyState() {
             const container = document.getElementById('task-list-container');
             if (container && container.querySelectorAll('.task-item').length === 0) {
@@ -260,6 +315,11 @@ HTML_TEMPLATE = """
             fadeOutElement(taskId);
             fetch('/delete/' + taskId, { method: 'POST' });
             return false;
+        }
+
+        // 安全防護字串轉換
+        function escapeHtml(text) {
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
     </script>
 </body>
@@ -281,30 +341,24 @@ def index():
 @app.route("/add", methods=["POST"])
 def add_task():
     task = request.form.get("new_task")
+    new_id = None
     if task:
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("INSERT INTO github_tasks (task) VALUES (%s);", (task,))
+        # 插入數據並返回新生成的 ID
+        cur.execute("INSERT INTO github_tasks (task) VALUES (%s) RETURNING id;", (task,))
+        new_id = cur.fetchone()[0]
         conn.commit()
         cur.close()
         conn.close()
-    return redirect("/")
+        return jsonify({"success": True, "id": new_id})
+    return jsonify({"success": False})
 
 @app.route("/delete/<int:task_id>", methods=["POST"])
 def delete_task(task_id):
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("DELETE FROM github_tasks WHERE id = %s;", (task_id,))
-    conn.commit()
-    cur.close()
-    conn.close()
-    return jsonify({"success": True})
-
-@app.route("/toggle/<int:task_id>", methods=["POST"])
-def toggle_task(task_id):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("UPDATE github_tasks SET is_completed = NOT is_completed WHERE id = %s;", (task_id,))
     conn.commit()
     cur.close()
     conn.close()
