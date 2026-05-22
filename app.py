@@ -211,20 +211,25 @@ HTML_TEMPLATE = """
     <script>
         function toggleTask(taskId) {
             const taskElement = document.getElementById('task-' + taskId);
-            taskElement.classList.toggle('completed');
-            fetch('/toggle/' + taskId, { method: 'POST' });
+            if (taskElement) {
+                taskElement.classList.toggle('completed');
+                fetch('/toggle/' + taskId, { method: 'POST' });
+            }
         }
 
         function deleteTask(taskId) {
             const taskElement = document.getElementById('task-' + taskId);
-            if (taskElement) {
-                taskElement.remove();
-            }
+            if (!taskElement) return;
+
+            // 1. 先把這個項目從畫面上拔除
+            taskElement.remove();
             
+            // 2. 同步通知雲端資料庫刪除
             fetch('/delete/' + taskId, { method: 'POST' })
             .then(() => {
                 const container = document.getElementById('task-list-container');
-                if (container.querySelectorAll('.task-item').length === 0) {
+                // 3. 確保檢查時排除任何可能殘留的空白，真正沒東西才顯示喝咖啡
+                if (container.children.length === 0 || container.querySelectorAll('.task-item').length === 0) {
                     container.innerHTML = '<div class="empty-state" id="empty-msg">☕ 目前沒有待辦事項，休息一下吧！</div>';
                 }
             });
@@ -237,7 +242,7 @@ HTML_TEMPLATE = """
 @app.route("/")
 def index():
     if not DATABASE_URL:
-        return "請在 Render 設定 DATABASE_URL 環境變數"
+        return "請在 Render 設定 DATABASE_URL 開放環境變數"
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT id, task, is_completed FROM github_tasks ORDER BY id DESC;")
