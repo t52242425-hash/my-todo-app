@@ -44,12 +44,17 @@ HTML_TEMPLATE = """
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
+            /* 核心：加上一張高質感的自然風景背景圖，並讓它滿版固定 */
+            background: url('https://www.wallpaperflare.com/search?wallpaper=%E6%A4%8E%E5%90%8D%E7%9C%9F%E6%98%BC') no-repeat center center fixed;
+            background-size: cover;
+            
             color: var(--text-main);
             margin: 0;
             padding: 20px;
             display: flex;
             justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
         }
 
         .container {
