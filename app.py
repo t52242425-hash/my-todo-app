@@ -53,7 +53,7 @@ HTML_TEMPLATE = """
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: url('https://c4.wallpaperflare.com/wallpaper/892/625/70/%E6%A4%8E%E5%90%8D%E7%9C%9F%E6%98%BC-%E3%81%8A%E9%9A%A3%E3%81%AE%E5%A4%A9%E4%BD%BF%E6%A7%98%E3%81%AB%E3%81%84%E3%81%A4%E3%81%AE%E9%96%93%E3%81%AB%E3%81%8B%E9%A7%84%E7%9B%AE%E4%BA%BA%E9%96%93%E3%81%AB%E3%81%95%E3%82%8C%E3%81%A6%E3%81%84%E3%81%9F%E4%BB%B6-hd-wallpaper-preview.jpg') no-repeat center center fixed;
+            background: url('https://c4.wallpaperflare.com/wallpaper/892/625/70/%E6%A4%8E%E5%90%8D%E7%9C%9F%E6%98%BC-%E3%81%8A%E9%9A%A3%E3%81%AE%E5%A4%A9%E4%BD%BF%E6%A7%98%E3%81%AB%E3%81%84%E3%81%A4%E3%81%AE%E9%96%93%E3%81%AB%E3%81%8B%E9%A7%84%E7%9B%AE%E4%BA%BA%E9%96%93%E3%81%AB%E3%81%8B%E3%81%95%E3%82%8C%E3%81%A6%E3%81%84%E3%81%A4%E3%81%AE%E9%96%93%E3%81%AB%E3%81%8B%E9%A7%84%E7%9B%AE%E4%BA%BA%E9%96%93%E3%81%AB%E3%81%95%E3%82%8C%E3%81%A6%E3%81%84%E3%81%9F%E4%BB%B6-hd-wallpaper-preview.jpg') no-repeat center center fixed;
             background-size: cover;
             color: var(--text-main);
             margin: 0;
@@ -159,7 +159,7 @@ HTML_TEMPLATE = """
             }
         }
 
-        /* 核心改動：改用純 @keyframes 動態淡出，避開所有 Transition 屬性衝突 */
+        /* 漸漸消失動畫樣式 */
         .task-item.run-fade-out {
             pointer-events: none; /* 點擊後立刻停用所有按鈕，防止二次觸發 */
             animation: itemFadeOut 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
@@ -191,6 +191,7 @@ HTML_TEMPLATE = """
             word-break: break-all;
             padding-right: 10px;
             flex: 1;
+            cursor: pointer; /* 讓滑鼠移到文字上時顯示為手指，提示可點擊 */
         }
 
         .btn-delete {
@@ -228,8 +229,8 @@ HTML_TEMPLATE = """
         <div class="task-list" id="task-list-container">
             {% for task in tasks %}
             <div class="task-item" id="task-{{ task[0] }}">
-                <span class="task-text">{{ task[1] }}</span>
-                <!-- 按鈕上直接帶有各自獨立的 onclick 呼叫 -->
+                <!-- 關鍵改動：文字部分也同步綁定 executeDelete 動畫與刪除邏輯 -->
+                <span class="task-text" onclick="executeDelete({{ task[0] }})">{{ task[1] }}</span>
                 <button type="button" class="btn btn-delete" onclick="executeDelete({{ task[0] }})">✕ 刪除</button>
             </div>
             {% else %}
@@ -268,10 +269,10 @@ HTML_TEMPLATE = """
                     const newItem = document.createElement('div');
                     newItem.className = 'task-item';
                     newItem.id = 'task-' + data.id;
-                    // 新增的 HTML 同樣乾淨對接模組二
+                    // 新增出來的項目，文字也同樣綁定上 executeDelete
                     newItem.innerHTML = `
-                        <span class="task-text">${escapeHtml(taskText)}</span>
-                        <button type="button" class="btn btn-delete" onclick="executeDelete(${data.id})">✕ 刪除</button>
+                        <span class="task-text" onclick="executeDelete(${data.id})">${escapeHtml(taskText)}</span>
+                        <button type="button" class="btn btn-delete" onclick="executeDelete(${data.id})">✕ 完成</button>
                     `;
                     container.insertBefore(newItem, container.firstChild);
                 }
@@ -285,7 +286,7 @@ HTML_TEMPLATE = """
             const taskItem = document.getElementById('task-' + taskId);
             if (!taskItem) return;
 
-            // 1. 防禦：如果已經在淡出中，就直接跳出，絕不重複執行
+            // 1. 防禦：如果已經在淡出中（例如狂點），就直接跳出，絕不重複執行
             if (taskItem.classList.contains('run-fade-out')) return;
 
             // 2. 加載 CSS @keyframes 淡出動畫類別
@@ -294,11 +295,11 @@ HTML_TEMPLATE = """
             // 3. 同步對雲端資料庫發送刪除請求
             fetch('/delete/' + taskId, { method: 'POST' });
 
-            // 4. 使用最古老也最可靠的定時器：0.4秒動畫播完，精準移除 DOM
+            // 4. 定時器：0.4秒動畫播完，精準移除 DOM
             setTimeout(function() {
                 taskItem.remove();
                 
-                // 檢查是否所有事項都沒了，是的話就秀出點心提醒
+                // 檢查是否所有事項都沒了
                 const container = document.getElementById('task-list-container');
                 if (container && container.querySelectorAll('.task-item').length === 0) {
                     container.innerHTML = '<div class="empty-state" id="empty-msg">☕ 目前沒有待辦事項，休息一下吧！</div>';
