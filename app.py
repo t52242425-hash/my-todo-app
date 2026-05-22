@@ -163,6 +163,12 @@ HTML_TEMPLATE = """
             transition: all 0.2s;
         }
 
+        .delete-form {
+            margin: 0;
+            padding: 0;
+            display: inline;
+        }
+
         .btn-delete {
             background-color: transparent;
             color: var(--danger);
@@ -198,7 +204,10 @@ HTML_TEMPLATE = """
             {% for task in tasks %}
             <div class="task-item {% if task[2] %}completed{% endif %}" id="task-{{ task[0] }}">
                 <span class="task-text" onclick="toggleTask({{ task[0] }})">{{ task[1] }}</span>
-                <button type="button" class="btn btn-delete" onclick="deleteTask({{ task[0] }})">✕ 刪除</button>
+                <!-- 改用傳統 Form 表單，強制手機每次點擊都必須老實送出給資料庫，杜絕重複點擊或死而復生 -->
+                <form method="POST" action="/delete/{{ task[0] }}" class="delete-form">
+                    <button type="submit" class="btn btn-delete">✕ 刪除</button>
+                </form>
             </div>
             {% else %}
             <div class="empty-state" id="empty-msg">
@@ -215,24 +224,6 @@ HTML_TEMPLATE = """
                 taskElement.classList.toggle('completed');
                 fetch('/toggle/' + taskId, { method: 'POST' });
             }
-        }
-
-        function deleteTask(taskId) {
-            const taskElement = document.getElementById('task-' + taskId);
-            if (!taskElement) return;
-
-            // 1. 先把這個項目從畫面上拔除
-            taskElement.remove();
-            
-            // 2. 同步通知雲端資料庫刪除
-            fetch('/delete/' + taskId, { method: 'POST' })
-            .then(() => {
-                const container = document.getElementById('task-list-container');
-                // 3. 確保檢查時排除任何可能殘留的空白，真正沒東西才顯示喝咖啡
-                if (container.children.length === 0 || container.querySelectorAll('.task-item').length === 0) {
-                    container.innerHTML = '<div class="empty-state" id="empty-msg">☕ 目前沒有待辦事項，休息一下吧！</div>';
-                }
-            });
         }
     </script>
 </body>
@@ -271,7 +262,7 @@ def delete_task(task_id):
     conn.commit()
     cur.close()
     conn.close()
-    return jsonify({"success": True})
+    return redirect("/") # 刪除後直接重新整頁，最符合手機 App 運作邏輯
 
 @app.route("/toggle/<int:task_id>", methods=["POST"])
 def toggle_task(task_id):
