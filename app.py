@@ -53,7 +53,7 @@ HTML_TEMPLATE = """
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: url('https://c4.wallpaperflare.com/wallpaper/892/625/70/%E6%A4%8E%E5%90%8D%E7%9C%9F%E6%98%BC-%E3%81%8A%E9%9A%A3%E3%81%AE%E5%A4%A9%E4%BD%BF%E6%A7%98%E3%81%AB%E3%81%84%E3%81%A4%E3%81%AE%E9%96%93%E3%81%AB%E3%81%8B%E9%A7%84%E7%9B%AE%E4%BA%BA%E9%96%93%E3%81%AB%E3%81%95%E3%82%8C%E3%81%A6%E3%81%84%E3%81%9F%E4%BB%B件-hd-wallpaper-preview.jpg') no-repeat center center fixed;
+            background: url('https://c4.wallpaperflare.com/wallpaper/892/625/70/%E6%A4%8E%E5%90%8D%E7%9C%9F%E6%98%BC-%E3%81%8A%E9%9A%A3%E3%81%AE%E5%A4%A9%E4%BD%BF%E6%A7%98%E3%81%AB%E3%81%84%E3%81%A4%E3%81%AE%E9%96%93%E3%81%AB%E3%81%8B%E9%A7%84%E7%9B%AE%E4%BA%BA%E9%96%93%E3%81%AB%E3%81%95%E3%82%8C%E3%81%A6%E3%81%84%E3%81%9F%E4%BB%B6-hd-wallpaper-preview.jpg') no-repeat center center fixed;
             background-size: cover;
             color: var(--text-main);
             margin: 0;
@@ -134,7 +134,6 @@ HTML_TEMPLATE = """
             gap: 12px;
         }
 
-        /* 事項基本與登場動畫設定 */
         .task-item {
             display: flex;
             justify-content: space-between;
@@ -143,56 +142,54 @@ HTML_TEMPLATE = """
             background-color: rgba(248, 250, 252, 0.9);
             border: 1px solid rgba(237, 242, 247, 0.5);
             border-radius: var(--border-radius);
-            max-height: 80px; 
-            opacity: 1;
-            transform: scale(1);
-            overflow: hidden;
             box-sizing: border-box;
             
-            /* 平滑淡出的 Transition 核心 */
-            transition: opacity 0.4s ease, 
-                        transform 0.4s ease, 
-                        max-height 0.4s ease, 
-                        padding 0.4s ease, 
-                        margin 0.4s ease;
-            
-            animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            /* 新增時的滑入動畫 */
+            animation: slideIn 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
 
         @keyframes slideIn {
             from {
                 opacity: 0;
-                transform: translateY(-20px) scale(0.95);
-                max-height: 0;
-                padding-top: 0;
-                padding-bottom: 0;
+                transform: translateY(-15px) scale(0.97);
             }
             to {
                 opacity: 1;
                 transform: translateY(0) scale(1);
-                max-height: 80px;
             }
         }
 
-        /* 漸漸消失動畫樣式 */
-        .task-item.fade-out {
-            animation: none !important; 
-            opacity: 0 !important;
-            transform: scale(0.8) translateY(-15px) !important;
-            max-height: 0 !important;
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
-            margin-top: 0 !important;
-            margin-bottom: 0 !important;
-            border-color: transparent !important;
-            pointer-events: none;
+        /* 核心改動：改用純 @keyframes 動態淡出，避開所有 Transition 屬性衝突 */
+        .task-item.run-fade-out {
+            pointer-events: none; /* 點擊後立刻停用所有按鈕，防止二次觸發 */
+            animation: itemFadeOut 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        }
+
+        @keyframes itemFadeOut {
+            0% {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+                max-height: 100px;
+                padding-top: 14px;
+                padding-bottom: 14px;
+                margin-bottom: 12px;
+            }
+            100% {
+                opacity: 0;
+                transform: scale(0.8) translateY(-20px);
+                max-index: 0;
+                max-height: 0;
+                padding-top: 0;
+                padding-bottom: 0;
+                margin-bottom: 0;
+                border-color: transparent;
+            }
         }
 
         .task-text {
             font-size: 16px;
             word-break: break-all;
             padding-right: 10px;
-            cursor: pointer;
             flex: 1;
         }
 
@@ -228,12 +225,12 @@ HTML_TEMPLATE = """
             <button type="submit" class="btn btn-primary">新增</button>
         </form>
 
-        <!-- 核心改變：我們徹底拿掉 HTML 裡的所有 onclick 事前綁定，改用全動態監聽 -->
         <div class="task-list" id="task-list-container">
             {% for task in tasks %}
-            <div class="task-item" id="task-{{ task[0] }}" data-id="{{ task[0] }}">
+            <div class="task-item" id="task-{{ task[0] }}">
                 <span class="task-text">{{ task[1] }}</span>
-                <button type="button" class="btn btn-delete">✕ 刪除</button>
+                <!-- 按鈕上直接帶有各自獨立的 onclick 呼叫 -->
+                <button type="button" class="btn btn-delete" onclick="executeDelete({{ task[0] }})">✕ 刪除</button>
             </div>
             {% else %}
             <div class="empty-state" id="empty-msg">
@@ -244,7 +241,9 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
-        // 1. 處理新增事項
+        // ==========================================
+        // 模組一：獨立的「新增事項」程式區塊
+        // ==========================================
         document.getElementById('add-form').addEventListener('submit', function(e) {
             e.preventDefault();
             
@@ -269,57 +268,42 @@ HTML_TEMPLATE = """
                     const newItem = document.createElement('div');
                     newItem.className = 'task-item';
                     newItem.id = 'task-' + data.id;
-                    newItem.setAttribute('data-id', data.id); // 埋入 ID 供動態查找
+                    // 新增的 HTML 同樣乾淨對接模組二
                     newItem.innerHTML = `
                         <span class="task-text">${escapeHtml(taskText)}</span>
-                        <button type="button" class="btn btn-delete">✕ 刪除</button>
+                        <button type="button" class="btn btn-delete" onclick="executeDelete(${data.id})">✕ 刪除</button>
                     `;
                     container.insertBefore(newItem, container.firstChild);
                 }
             });
         });
 
-        // 2.【終極核心】事件代理人：直接在最外層大容器監聽點擊
-        document.getElementById('task-list-container').addEventListener('click', function(e) {
-            // 判斷點擊的是不是「文字」或「✕ 刪除按鈕」
-            if (e.target.classList.contains('task-text') || e.target.classList.contains('btn-delete')) {
-                e.stopPropagation();
+        // ==========================================
+        // 模組二：獨立的「刪除與淡出動畫」程式區塊
+        // ==========================================
+        function executeDelete(taskId) {
+            const taskItem = document.getElementById('task-' + taskId);
+            if (!taskItem) return;
+
+            // 1. 防禦：如果已經在淡出中，就直接跳出，絕不重複執行
+            if (taskItem.classList.contains('run-fade-out')) return;
+
+            // 2. 加載 CSS @keyframes 淡出動畫類別
+            taskItem.classList.add('run-fade-out');
+
+            // 3. 同步對雲端資料庫發送刪除請求
+            fetch('/delete/' + taskId, { method: 'POST' });
+
+            // 4. 使用最古老也最可靠的定時器：0.4秒動畫播完，精準移除 DOM
+            setTimeout(function() {
+                taskItem.remove();
                 
-                // 往上找到最靠近的 .task-item 祖先元素
-                const taskItem = e.target.closest('.task-item');
-                if (!taskItem) return;
-                
-                const taskId = taskItem.getAttribute('data-id');
-                if (!taskId) return;
-
-                // 如果已經在淡出了，就不要重複執行
-                if (taskItem.classList.contains('fade-out')) return;
-
-                // 立即悄悄發送刪除命令給後端資料庫
-                fetch('/delete/' + taskId, { method: 'POST' });
-
-                // 觸發前端淡出過渡效果
-                taskItem.classList.add('fade-out');
-
-                // 使用極度保險的雙重保障：優先採用 Transition 結束事件，如果卡住就用 setTimeout 備援
-                let removed = false;
-                function removeNode() {
-                    if (removed) return;
-                    removed = true;
-                    taskItem.remove();
-                    checkEmptyState();
+                // 檢查是否所有事項都沒了，是的話就秀出點心提醒
+                const container = document.getElementById('task-list-container');
+                if (container && container.querySelectorAll('.task-item').length === 0) {
+                    container.innerHTML = '<div class="empty-state" id="empty-msg">☕ 目前沒有待辦事項，休息一下吧！</div>';
                 }
-
-                taskItem.addEventListener('transitionend', removeNode, { once: true });
-                setTimeout(removeNode, 450); // 備援機制：如果瀏覽器沒觸發事件，450毫秒後也絕對強制拔除
-            }
-        });
-
-        function checkEmptyState() {
-            const container = document.getElementById('task-list-container');
-            if (container && container.querySelectorAll('.task-item').length === 0) {
-                container.innerHTML = '<div class="empty-state" id="empty-msg">☕ 目前沒有待辦事項，休息一下吧！</div>';
-            }
+            }, 400); 
         }
 
         function escapeHtml(text) {
