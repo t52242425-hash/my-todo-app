@@ -78,7 +78,7 @@ HTML_TEMPLATE = """
             box-sizing: border-box;
             
             /* 加上輕微的白色細邊框，看起來更精緻 */
-            border: 1px solid rgba(255, 255, 255, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         h2 {
