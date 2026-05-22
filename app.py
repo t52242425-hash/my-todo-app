@@ -8,11 +8,9 @@ app = Flask(__name__)
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db_connection():
-    # 建立與 Render PostgreSQL 的安全連線
     return psycopg2.connect(DATABASE_URL, sslmode='require')
 
 def init_db():
-    # 自動在雲端建立資料表
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("""
@@ -26,7 +24,6 @@ def init_db():
     cur.close()
     conn.close()
 
-# 啟動時自動初始化資料庫
 if DATABASE_URL:
     try:
         init_db()
@@ -40,7 +37,6 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我的質感待辦清單</title>
-    <link rel="manifest" href="/manifest.json">
     <style>
         :root {
             --bg-color: #f4f6f9;
@@ -57,7 +53,7 @@ HTML_TEMPLATE = """
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: url('https://c4.wallpaperflare.com/wallpaper/892/625/70/%E6%A4%8E%E5%90%8D%E7%9C%9F%E6%98%BC-%E3%81%8A%E9%9A%A3%E3%81%AE%E5%A4%A9%E4%BD%BF%E6%A7%98%E3%81%AB%E3%81%84%E3%81%A4%E3%81%AE%E9%96%93%E3%81%AB%E3%81%8B%E9%A7%84%E7%9B%AE%E4%BA%BA%E9%96%93%E3%81%AB%E3%81%95%E3%82%8C%E3%81%A6%E3%81%84%E3%81%9F%E4%BB%B6-hd-wallpaper-preview.jpg') no-repeat center center fixed;
+            background: url('https://w.wallhaven.cc/full/ex/wallhaven-ex9688.png') no-repeat center center fixed;
             background-size: cover;
             color: var(--text-main);
             margin: 0;
@@ -149,7 +145,6 @@ HTML_TEMPLATE = """
             transition: all 0.3s ease;
         }
 
-        /* 當被劃掉時的精美動態特效 */
         .task-item.completed {
             opacity: 0.5;
         }
@@ -199,16 +194,14 @@ HTML_TEMPLATE = """
             <button type="submit" class="btn btn-primary">新增</button>
         </form>
 
-        <div class="task-list">
+        <div class="task-list" id="task-list-container">
             {% for task in tasks %}
             <div class="task-item {% if task[2] %}completed{% endif %}" id="task-{{ task[0] }}">
                 <span class="task-text" onclick="toggleTask({{ task[0] }})">{{ task[1] }}</span>
-                <form method="POST" action="/delete/{{ task[0] }}" style="margin: 0;">
-                    <button type="submit" class="btn btn-delete">✕ 刪除</button>
-                </form>
+                <button type="button" class="btn btn-delete" onclick="deleteTask({{ task[0] }})">✕ 完成</button>
             </div>
             {% else %}
-            <div class="empty-state">
+            <div class="empty-state" id="empty-msg">
                 ☕ 目前沒有待辦事項，休息一下吧！
             </div>
             {% endfor %}
@@ -216,10 +209,29 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
+        // 點擊文字：切換劃掉特效
         function toggleTask(taskId) {
             const taskElement = document.getElementById('task-' + taskId);
             taskElement.classList.toggle('completed');
             fetch('/toggle/' + taskId, { method: 'POST' });
+        }
+
+        // 點擊刪除：讓畫面上的項目直接消失
+        function deleteTask(taskId) {
+            const taskElement = document.getElementById('task-' + taskId);
+            if (taskElement) {
+                taskElement.remove(); // 讓網頁上的元素立刻消失
+            }
+            
+            // 同步通知後台資料庫刪除
+            fetch('/delete/' + taskId, { method: 'POST' })
+            .then(() => {
+                const container = document.getElementById('task-list-container');
+                // 如果刪到沒東西了，顯示喝咖啡的提示
+                if (container.children.length === 0) {
+                    container.innerHTML = '<div class="empty-state" id="empty-msg">☕ 目前沒有待辦事項，休息一下吧！</div>';
+                }
+            });
         }
     </script>
 </body>
@@ -258,7 +270,7 @@ def delete_task(task_id):
     conn.commit()
     cur.close()
     conn.close()
-    return redirect("/")
+    return jsonify({"success": True})
 
 @app.route("/toggle/<int:task_id>", methods=["POST"])
 def toggle_task(task_id):
@@ -269,25 +281,6 @@ def toggle_task(task_id):
     cur.close()
     conn.close()
     return jsonify({"success": True})
-
-@app.route("/manifest.json")
-def manifest():
-    return jsonify({
-        "short_name": "我的清單",
-        "name": "我的質感待辦清單 App",
-        "icons": [
-            {
-                "src": "https://cdn-icons-png.flaticon.com/512/9063/9063163.png",
-                "type": "image/png",
-                "sizes": "512x512"
-            }
-        ],
-        "start_url": "/",
-        "background_color": "#f4f6f9",
-        "theme_color": "#4a6fa5",
-        "display": "standalone",
-        "orientation": "portrait"
-    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
