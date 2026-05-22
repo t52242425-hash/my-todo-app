@@ -64,21 +64,23 @@ HTML_TEMPLATE = """
             width: 100%;
             max-width: 480px;
             
-            /* 關鍵修正 1：原本是 #ffffff(純白)，改成帶有 0.85 透明度的白 */
-            background: rgba(255, 255, 255, 0.85); 
+            /* 1. 設定你想要的透明度，0.5 是一個很平衡、看得清字又能透出真晝的舒服數值 */
+            background: rgba(255, 255, 255, 0.5); 
             
-            /* 關鍵修正 2：毛玻璃核心！讓卡片背後的真晝圖片產生高質感模糊，文字才會清晰 */
+            /* 2. 毛玻璃霧面效果 */
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
             
             border-radius: var(--border-radius);
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15); /* 讓陰影稍微加深，增加懸浮感 */
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15);
             padding: 24px;
             margin-top: 20px;
             box-sizing: border-box;
             
-            /* 加上輕微的白色細邊框，看起來更精緻 */
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            /* 3. 精緻的邊框 */
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            
+            /* 💡 注意：原本這裡有一行 background-color: var(--card-bg); 已經被我們消滅了！ */
         }
 
         h2 {
