@@ -134,6 +134,7 @@ HTML_TEMPLATE = """
             gap: 12px;
         }
 
+        /* 初始狀態 */
         .task-item {
             display: flex;
             justify-content: space-between;
@@ -142,7 +143,24 @@ HTML_TEMPLATE = """
             background-color: rgba(248, 250, 252, 0.9);
             border: 1px solid rgba(237, 242, 247, 0.5);
             border-radius: var(--border-radius);
-            transition: all 0.2s ease;
+            /* 核心設定：0.4秒內高度、高度內縮、透明度同時進行平滑變形 */
+            transition: opacity 0.4s ease, transform 0.4s ease, max-height 0.4s ease, padding 0.4s ease, margin 0.4s ease;
+            max-height: 100px; 
+            opacity: 1;
+            transform: scale(1);
+            overflow: hidden;
+        }
+
+        /* 漸漸消失時被加上去的動態樣式 */
+        .task-item.fade-out {
+            opacity: 0;
+            transform: scale(0.9) translateY(-10px); /* 縮小並往上飄移 */
+            max-height: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            margin-top: 0;
+            margin-bottom: 0;
+            border-color: transparent;
         }
 
         .task-text {
@@ -208,27 +226,38 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
-        function removeElementFromScreen(taskId) {
+        // 核心：給予元素 .fade-out 樣式讓它慢慢變透明、變矮，動畫播完後正式從網頁移除
+        function fadeOutElement(taskId) {
             const taskElement = document.getElementById('task-' + taskId);
             if (taskElement) {
-                taskElement.remove();
+                taskElement.classList.add('fade-out'); // 觸發 CSS 漸漸消失動畫
+                
+                // 等待 400 毫秒動畫播完，再把元素徹底從網頁中徹底移除
+                setTimeout(() => {
+                    taskElement.remove();
+                    checkEmptyState();
+                }, 400);
             }
+        }
+
+        // 檢查如果清單空了，淡入顯示咖啡提示
+        function checkEmptyState() {
             const container = document.getElementById('task-list-container');
             if (container && container.querySelectorAll('.task-item').length === 0) {
                 container.innerHTML = '<div class="empty-state" id="empty-msg">☕ 目前沒有待辦事項，休息一下吧！</div>';
             }
         }
 
-        // 點擊文字本身：觸發立刻蒸發消失
+        // 點擊文字本身：漸漸消失
         function dismissTask(taskId) {
-            removeElementFromScreen(taskId);
+            fadeOutElement(taskId);
             fetch('/delete/' + taskId, { method: 'POST' });
         }
 
-        // 點擊刪除按鈕：觸發立刻蒸發消失
+        // 點擊刪除按鈕：漸漸消失
         function dismissTaskWithForm(event, taskId) {
             event.preventDefault();
-            removeElementFromScreen(taskId);
+            fadeOutElement(taskId);
             fetch('/delete/' + taskId, { method: 'POST' });
             return false;
         }
